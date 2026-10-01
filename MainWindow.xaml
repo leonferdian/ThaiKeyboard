@@ -65,32 +65,42 @@
         <Grid Grid.Row="0" Margin="15" x:Name="TranslationGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Thai Side -->
+            <!-- Source Side -->
             <Grid Grid.Column="0" Margin="0,0,10,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <TextBlock Text="Thai (ไทย)" Foreground="White" FontSize="18" Margin="0,0,0,5"/>
+                <ComboBox x:Name="SourceLanguageComboBox" SelectedIndex="0" Margin="0,0,0,5" Height="28" FontSize="16">
+                    <ComboBoxItem Content="Thai (ไทย)" Tag="th"/>
+                    <ComboBoxItem Content="Indonesian (ภาษาอินโดนีเซีย)" Tag="id"/>
+                    <ComboBoxItem Content="English (ภาษาอังกฤษ)" Tag="en"/>
+                </ComboBox>
                 <Border Grid.Row="1" Background="White" CornerRadius="0" Height="160">
                     <Grid>
-                        <TextBox x:Name="SourceTextBox" BorderThickness="0" Background="Transparent" Foreground="Black" FontSize="20" Padding="10" AcceptsReturn="True" TextWrapping="Wrap"/>
+                        <TextBox x:Name="SourceTextBox" BorderThickness="0" Background="Transparent" Foreground="Black" FontSize="20" Padding="10" AcceptsReturn="True" TextWrapping="Wrap" TextChanged="SourceTextBox_TextChanged" PreviewKeyDown="SourceTextBox_PreviewKeyDown"/>
                         <Button Content="文A TRANSLATE" Style="{StaticResource TranslateButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="10" Click="Translate_Click"/>
                     </Grid>
                 </Border>
             </Grid>
 
-            <!-- Indonesian Side -->
-            <Grid Grid.Column="1" Margin="10,0,0,0">
+            <!-- Swap Button -->
+            <Button Grid.Column="1" Content="⇄" FontSize="24" FontWeight="Bold" Background="Transparent" BorderThickness="0" Foreground="White" VerticalAlignment="Top" Margin="0,-2,0,0" Height="32" Click="SwapLanguage_Click" ToolTip="Swap languages"/>
+
+            <!-- Target Side -->
+            <Grid Grid.Column="2" Margin="10,0,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <ComboBox SelectedIndex="0" Margin="0,0,0,5" Height="28" FontSize="16">
-                    <ComboBoxItem Content="Indonesian (ภาษาอินโดนีเซีย)"/>
+                <ComboBox x:Name="TargetLanguageComboBox" SelectedIndex="1" Margin="0,0,0,5" Height="28" FontSize="16">
+                    <ComboBoxItem Content="Thai (ไทย)" Tag="th"/>
+                    <ComboBoxItem Content="Indonesian (ภาษาอินโดนีเซีย)" Tag="id"/>
+                    <ComboBoxItem Content="English (ภาษาอังกฤษ)" Tag="en"/>
                 </ComboBox>
                 <Border Grid.Row="1" Background="White" CornerRadius="0" Height="160">
                     <Grid>
@@ -105,6 +115,21 @@
                 </Border>
             </Grid>
         </Grid>
+
+        <!-- Prediction Popup -->
+        <Popup x:Name="PredictionPopup" PlacementTarget="{Binding ElementName=SourceTextBox}" Placement="Bottom" StaysOpen="False" IsOpen="False">
+            <Border Background="White" BorderBrush="LightGray" BorderThickness="1" CornerRadius="4" Padding="0">
+                <ListBox x:Name="PredictionListBox" PreviewKeyDown="PredictionListBox_PreviewKeyDown" BorderThickness="0" Background="Transparent" FontSize="18" MinWidth="150" MaxHeight="200">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="10,5"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="PredictionItem_Click"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </Border>
+        </Popup>
 
         <!-- Keyboard Area -->
         <Border Grid.Row="1" Background="#D5D9E0" CornerRadius="10,10,0,0" Margin="15,0,15,0" Padding="10,15,10,0">

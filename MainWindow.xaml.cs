@@ -371,23 +371,249 @@ namespace ThaiKeyboard
             TargetTextBox.Clear();
         }
 
+        private void SwapLanguage_Click(object sender, RoutedEventArgs e)
+        {
+            int sourceIndex = SourceLanguageComboBox.SelectedIndex;
+            int targetIndex = TargetLanguageComboBox.SelectedIndex;
+            
+            SourceLanguageComboBox.SelectedIndex = targetIndex;
+            TargetLanguageComboBox.SelectedIndex = sourceIndex;
+
+            string sourceText = SourceTextBox.Text;
+            string targetText = TargetTextBox.Text;
+
+            SourceTextBox.Text = targetText;
+            TargetTextBox.Text = sourceText;
+        }
+
         private async void Translate_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(SourceTextBox.Text)) return;
             
+            string sourceLang = (SourceLanguageComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "th";
+            string targetLang = (TargetLanguageComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "id";
+
             TargetTextBox.Text = "Translating...";
             try
             {
                 using var client = new HttpClient();
-                string url = $"https://api.mymemory.translated.net/get?q={Uri.EscapeDataString(SourceTextBox.Text)}&langpair=th|id";
+                string url = $"https://translate.googleapis.com/translate_a/single?client=gtx&sl={sourceLang}&tl={targetLang}&dt=t&dt=rm&q={Uri.EscapeDataString(SourceTextBox.Text)}";
+                
                 string json = await client.GetStringAsync(url);
-                var root = JsonNode.Parse(json);
-                TargetTextBox.Text = root["responseData"]["translatedText"].ToString();
+                var root = JsonNode.Parse(json) as JsonArray;
+                
+                string translatedText = "";
+                string romanizedText = "";
+                
+                if (root != null && root.Count > 0 && root[0] is JsonArray dataArray)
+                {
+                    foreach (var item in dataArray)
+                    {
+                        if (item is JsonArray segmentData)
+                        {
+                            if (segmentData.Count > 0 && segmentData[0] != null)
+                            {
+                                try { translatedText += (string)segmentData[0]; } catch {}
+                            }
+                            else if (segmentData.Count > 2 && segmentData[0] == null && segmentData[2] != null)
+                            {
+                                try { romanizedText += (string)segmentData[2]; } catch {}
+                            }
+                        }
+                    }
+                }
+                
+                if (!string.IsNullOrWhiteSpace(romanizedText))
+                {
+                    TargetTextBox.Text = $"{translatedText}\n\nSubtitle (Pronunciation):\n{romanizedText}";
+                }
+                else
+                {
+                    TargetTextBox.Text = translatedText;
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                TargetTextBox.Text = "[Offline/Error] Could not connect to translation API.\nOffline translation is limited.";
+                TargetTextBox.Text = $"[Offline/Error] Could not connect to translation API.\n{ex.Message}";
             }
+        }
+
+        private System.Threading.CancellationTokenSource _predictionCts;
+        private string _currentWordToReplace = "";
+        private int _currentWordStartIndex = -1;
+
+        private async void SourceTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            string sourceLang = (SourceLanguageComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString();
+            if (sourceLang != "th")
+            {
+                PredictionPopup.IsOpen = false;
+                return;
+            }
+
+            int caretIndex = SourceTextBox.SelectionStart;
+            string text = SourceTextBox.Text;
+            if (caretIndex <= 0 || caretIndex > text.Length)
+            {
+                PredictionPopup.IsOpen = false;
+                return;
+            }
+
+            int start = caretIndex - 1;
+            while (start >= 0 && !char.IsWhiteSpace(text[start]))
+            {
+                start--;
+            }
+            start++;
+
+            if (start >= caretIndex)
+            {
+                PredictionPopup.IsOpen = false;
+                return;
+            }
+
+            string currentWord = text.Substring(start, caretIndex - start);
+            _currentWordToReplace = currentWord;
+            _currentWordStartIndex = start;
+
+            _predictionCts?.Cancel();
+            _predictionCts = new System.Threading.CancellationTokenSource();
+            var token = _predictionCts.Token;
+
+            try
+            {
+                await Task.Delay(200, token);
+                if (token.IsCancellationRequested) return;
+
+                bool isLatin = true;
+                foreach (char c in currentWord)
+                {
+                    if (c >= 0x0E00 && c <= 0x0E7F) // Thai Unicode block
+                    {
+                        isLatin = false;
+                        break;
+                    }
+                }
+
+                using var client = new HttpClient();
+                string json = "";
+                var list = new List<string>();
+
+                if (isLatin)
+                {
+                    string url = $"https://inputtools.google.com/request?text={currentWord}&itc=th-t-i0-und&num=6&cp=0&cs=1&ie=utf-8&oe=utf-8";
+                    json = await client.GetStringAsync(url, token);
+                    var root = JsonNode.Parse(json) as JsonArray;
+                    if (root != null && root.Count > 1 && root[0].ToString() == "SUCCESS" && root[1] is JsonArray dataArr && dataArr.Count > 0)
+                    {
+                        if (dataArr[0] is JsonArray wordData && wordData.Count > 1 && wordData[1] is JsonArray suggestions)
+                        {
+                            foreach (var s in suggestions)
+                            {
+                                list.Add(s.ToString());
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    string url = $"http://suggestqueries.google.com/complete/search?client=firefox&q={Uri.EscapeDataString(currentWord)}&hl=th";
+                    json = await client.GetStringAsync(url, token);
+                    var root = JsonNode.Parse(json) as JsonArray;
+                    if (root != null && root.Count > 1 && root[1] is JsonArray suggestions)
+                    {
+                        foreach (var s in suggestions)
+                        {
+                            list.Add(s.ToString());
+                        }
+                    }
+                }
+
+                if (list.Count > 0)
+                {
+                    PredictionListBox.ItemsSource = list;
+                    PredictionPopup.IsOpen = true;
+                }
+                else
+                {
+                    PredictionPopup.IsOpen = false;
+                }
+            }
+            catch { }
+        }
+
+        private void SourceTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (PredictionPopup.IsOpen && PredictionListBox.Items.Count > 0)
+            {
+                if (e.Key == System.Windows.Input.Key.Down)
+                {
+                    PredictionListBox.Focus();
+                    PredictionListBox.SelectedIndex = 0;
+                    e.Handled = true;
+                }
+                else if (e.Key == System.Windows.Input.Key.Space || e.Key == System.Windows.Input.Key.Enter)
+                {
+                    string selectedWord = PredictionListBox.Items[0] as string;
+                    InsertPrediction(selectedWord);
+                    if (e.Key == System.Windows.Input.Key.Enter)
+                    {
+                        e.Handled = true;
+                    }
+                }
+                else if (e.Key == System.Windows.Input.Key.Escape)
+                {
+                    PredictionPopup.IsOpen = false;
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void PredictionListBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Space || e.Key == System.Windows.Input.Key.Enter)
+            {
+                if (PredictionListBox.SelectedItem is string selectedWord)
+                {
+                    InsertPrediction(selectedWord);
+                    if (e.Key == System.Windows.Input.Key.Space)
+                    {
+                        InsertInternalText(" ");
+                    }
+                    e.Handled = true;
+                }
+            }
+            else if (e.Key == System.Windows.Input.Key.Escape)
+            {
+                PredictionPopup.IsOpen = false;
+                SourceTextBox.Focus();
+                e.Handled = true;
+            }
+        }
+
+        private void PredictionItem_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (sender is ListBoxItem item && item.DataContext is string selectedWord)
+            {
+                InsertPrediction(selectedWord);
+            }
+        }
+
+        private void InsertPrediction(string selectedWord)
+        {
+            if (_currentWordStartIndex >= 0 && _currentWordStartIndex <= SourceTextBox.Text.Length)
+            {
+                string text = SourceTextBox.Text;
+                int lengthToReplace = _currentWordToReplace.Length;
+                
+                SourceTextBox.TextChanged -= SourceTextBox_TextChanged;
+                string newText = text.Remove(_currentWordStartIndex, lengthToReplace).Insert(_currentWordStartIndex, selectedWord);
+                SourceTextBox.Text = newText;
+                SourceTextBox.SelectionStart = _currentWordStartIndex + selectedWord.Length;
+                SourceTextBox.TextChanged += SourceTextBox_TextChanged;
+            }
+            PredictionPopup.IsOpen = false;
+            SourceTextBox.Focus();
         }
     }
 
