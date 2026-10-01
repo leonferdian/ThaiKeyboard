@@ -5,7 +5,8 @@
         Background="#2274B5" Foreground="White"
         WindowStartupLocation="CenterScreen"
         Loaded="Window_Loaded"
-        Deactivated="Window_Deactivated">
+        Deactivated="Window_Deactivated"
+        Icon="icon.ico">
     <Window.Resources>
         <Style TargetType="Button" x:Key="KeyButtonStyle">
             <Setter Property="Focusable" Value="False"/>

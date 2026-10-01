@@ -1,0 +1,10 @@
+Add-Type -AssemblyName System.Drawing
+$img = [System.Drawing.Image]::FromFile('C:\project\ThaiKeyboard\images\icon.jpg')
+$bmp = New-Object System.Drawing.Bitmap($img, 256, 256)
+$iconHandle = $bmp.GetHicon()
+$icon = [System.Drawing.Icon]::FromHandle($iconHandle)
+$fs = New-Object System.IO.FileStream('C:\project\ThaiKeyboard\icon.ico', [System.IO.FileMode]::Create)
+$icon.Save($fs)
+$fs.Close()
+$img.Dispose()
+$bmp.Dispose()
